@@ -255,6 +255,342 @@
                 ⚠️ Low Stock - Only <span id="stock_count"></span> left!
             </div>
 
+            {{!-- Add this section in your PDP template, before the "Add to Cart" button --}}
+            {{!-- Suggested location: Inside the <form> tag, after product options and before add-to-cart button --}}
+
+            <div id="addon-products-container" class="addon-products-section" style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;">
+                <h3 style="margin-top: 0; font-size: 16px; font-weight: bold;">Add Related Products</h3>
+                <div id="addon-products-list"></div>
+                <div id="addon-products-loading" style="display: none; text-align: center; padding: 20px;">
+                    <span>Loading add-ons...</span>
+                </div>
+            </div>
+
+            <script>
+            (function() {
+                // Configuration
+                var CUSTOM_FIELD_NAME = 'addon_products'; // The custom field name where you'll store addon product IDs
+                
+                // Get current product data
+                var productElement = document.querySelector('[data-entity-id]');
+                var currentProductId = productElement ? productElement.getAttribute('data-entity-id') : null;
+
+                if (!currentProductId) {
+                    console.error('Product ID not found');
+                    return;
+                }
+
+                console.log('Loading add-on products for product ID:', currentProductId);
+
+                // Query to get product with custom fields
+                var query = `
+                    query GetProductAddons($productId: Int!) {
+                        site {
+                            product(entityId: $productId) {
+                                entityId
+                                name
+                                customFields {
+                                    edges {
+                                        node {
+                                            name
+                                            value
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                `;
+
+                var payload = {
+                    query: query,
+                    variables: { productId: parseInt(currentProductId) }
+                };
+
+                // Show loading state
+                document.getElementById('addon-products-loading').style.display = 'block';
+
+                fetch('/graphql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer {{ settings.storefront_api.token }}'
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(function(res) {
+                    return res.json();
+                })
+                .then(function(json) {
+                    console.log('Product data response:', json);
+                    
+                    if (json && json.data && json.data.site && json.data.site.product) {
+                        var product = json.data.site.product;
+                        var customFields = product.customFields.edges;
+                        
+                        // Find the addon_products custom field
+                        var addonField = customFields.find(function(edge) {
+                            return edge.node.name === CUSTOM_FIELD_NAME;
+                        });
+                        
+                        if (addonField && addonField.node.value) {
+                            // Parse the addon product IDs (expecting comma-separated IDs like "123,456,789")
+                            var addonProductIds = addonField.node.value.split(',').map(function(id) {
+                                return parseInt(id.trim());
+                            }).filter(function(id) {
+                                return !isNaN(id);
+                            });
+                            
+                            console.log('Addon product IDs:', addonProductIds);
+                            
+                            if (addonProductIds.length > 0) {
+                                // Fetch details for addon products
+                                fetchAddonProducts(addonProductIds);
+                            } else {
+                                hideAddonSection();
+                            }
+                        } else {
+                            console.log('No addon products configured for this product');
+                            hideAddonSection();
+                        }
+                    } else {
+                        hideAddonSection();
+                    }
+                })
+                .catch(function(err) {
+                    console.error('Failed to fetch product data:', err);
+                    hideAddonSection();
+                });
+
+                // Fetch addon product details
+                function fetchAddonProducts(productIds) {
+                    var query = `
+                        query GetAddonProducts($productIds: [Int!]!) {
+                            site {
+                                products(entityIds: $productIds, first: 10) {
+                                    edges {
+                                        node {
+                                            entityId
+                                            name
+                                            sku
+                                            path
+                                            defaultImage {
+                                                url(width: 80, height: 80)
+                                                altText
+                                            }
+                                            prices {
+                                                price {
+                                                    value
+                                                    currencyCode
+                                                }
+                                            }
+                                            addToCartUrl
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    `;
+
+                    var payload = {
+                        query: query,
+                        variables: { productIds: productIds }
+                    };
+
+                    fetch('/graphql', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer {{ settings.storefront_api.token }}'
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(function(res) {
+                        return res.json();
+                    })
+                    .then(function(json) {
+                        console.log('Addon products response:', json);
+                        
+                        if (json && json.data && json.data.site && json.data.site.products) {
+                            var products = json.data.site.products.edges;
+                            
+                            if (products.length > 0) {
+                                displayAddonProducts(products);
+                            } else {
+                                hideAddonSection();
+                            }
+                        } else {
+                            hideAddonSection();
+                        }
+                    })
+                    .catch(function(err) {
+                        console.error('Failed to fetch addon products:', err);
+                        hideAddonSection();
+                    });
+                }
+
+                // Display addon products
+                function displayAddonProducts(products) {
+                    var container = document.getElementById('addon-products-list');
+                    document.getElementById('addon-products-loading').style.display = 'none';
+                    
+                    container.innerHTML = '';
+                    
+                    products.forEach(function(edge) {
+                        var product = edge.node;
+                        
+                        var addonItem = document.createElement('div');
+                        addonItem.className = 'addon-product-item';
+                        addonItem.style.cssText = 'display: flex; align-items: center; padding: 10px; margin-bottom: 10px; background: white; border-radius: 4px; border: 1px solid #e0e0e0;';
+                        
+                        // Checkbox
+                        var checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = 'addon-' + product.entityId;
+                        checkbox.value = product.entityId;
+                        checkbox.className = 'addon-product-checkbox';
+                        checkbox.style.cssText = 'margin-right: 12px; width: 18px; height: 18px; cursor: pointer;';
+                        checkbox.setAttribute('data-product-id', product.entityId);
+                        checkbox.setAttribute('data-product-name', product.name);
+                        checkbox.setAttribute('data-product-url', product.addToCartUrl);
+                        
+                        // Product image
+                        var imageContainer = document.createElement('div');
+                        imageContainer.style.cssText = 'margin-right: 12px; flex-shrink: 0;';
+                        
+                        if (product.defaultImage) {
+                            var img = document.createElement('img');
+                            img.src = product.defaultImage.url;
+                            img.alt = product.defaultImage.altText || product.name;
+                            img.style.cssText = 'width: 60px; height: 60px; object-fit: cover; border-radius: 4px;';
+                            imageContainer.appendChild(img);
+                        }
+                        
+                        // Product info
+                        var infoContainer = document.createElement('div');
+                        infoContainer.style.cssText = 'flex-grow: 1;';
+                        
+                        var productName = document.createElement('label');
+                        productName.htmlFor = 'addon-' + product.entityId;
+                        productName.style.cssText = 'font-weight: 600; display: block; margin-bottom: 4px; cursor: pointer;';
+                        productName.textContent = product.name;
+                        
+                        var productPrice = document.createElement('div');
+                        productPrice.style.cssText = 'color: #666; font-size: 14px;';
+                        if (product.prices && product.prices.price) {
+                            productPrice.textContent = product.prices.price.currencyCode + ' ' + product.prices.price.value.toFixed(2);
+                        }
+                        
+                        infoContainer.appendChild(productName);
+                        infoContainer.appendChild(productPrice);
+                        
+                        // Assemble the item
+                        addonItem.appendChild(checkbox);
+                        addonItem.appendChild(imageContainer);
+                        addonItem.appendChild(infoContainer);
+                        
+                        container.appendChild(addonItem);
+                    });
+                    
+                    // Show the addon section
+                    document.getElementById('addon-products-container').style.display = 'block';
+                }
+
+                // Hide addon section if no products
+                function hideAddonSection() {
+                    document.getElementById('addon-products-container').style.display = 'none';
+                    document.getElementById('addon-products-loading').style.display = 'none';
+                }
+
+                // Intercept add to cart form submission
+                var addToCartForm = document.querySelector('form[data-cart-item-add]');
+                
+                if (addToCartForm) {
+                    addToCartForm.addEventListener('submit', function(e) {
+                        // Check if any addons are selected
+                        var selectedAddons = document.querySelectorAll('.addon-product-checkbox:checked');
+                        
+                        if (selectedAddons.length > 0) {
+                            e.preventDefault(); // Prevent default form submission
+                            
+                            console.log('Adding main product and', selectedAddons.length, 'addon(s) to cart');
+                            
+                            // First, add the main product
+                            var formData = new FormData(addToCartForm);
+                            
+                            fetch(addToCartForm.action, {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(function(res) {
+                                return res.text();
+                            })
+                            .then(function(data) {
+                                console.log('Main product added to cart');
+                                
+                                // Now add each selected addon
+                                var addonPromises = [];
+                                
+                                selectedAddons.forEach(function(checkbox) {
+                                    var productId = checkbox.getAttribute('data-product-id');
+                                    var addToCartUrl = checkbox.getAttribute('data-product-url');
+                                    
+                                    // Create form data for addon product
+                                    var addonFormData = new FormData();
+                                    addonFormData.append('action', 'add');
+                                    addonFormData.append('product_id', productId);
+                                    addonFormData.append('qty[]', '1');
+                                    
+                                    var addonPromise = fetch('/cart.php', {
+                                        method: 'POST',
+                                        body: addonFormData
+                                    })
+                                    .then(function(res) {
+                                        console.log('Addon product', productId, 'added to cart');
+                                        return res;
+                                    });
+                                    
+                                    addonPromises.push(addonPromise);
+                                });
+                                
+                                // Wait for all addons to be added
+                                return Promise.all(addonPromises);
+                            })
+                            .then(function() {
+                                console.log('All products added to cart successfully');
+                                // Redirect to cart or reload page
+                                window.location.href = '/cart.php';
+                            })
+                            .catch(function(err) {
+                                console.error('Error adding products to cart:', err);
+                                alert('There was an error adding products to cart. Please try again.');
+                            });
+                        }
+                        // If no addons selected, allow normal form submission
+                    });
+                }
+            })();
+            </script>
+
+            <style>
+                .addon-products-section {
+                    animation: fadeIn 0.3s ease-in;
+                }
+                
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(-10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                
+                .addon-product-item:hover {
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    transition: box-shadow 0.2s ease;
+                }
+                
+                .addon-product-checkbox:checked + div + div label {
+                    color: #333;
+                }
+            </style>
                 {{> components/products/add-to-cart with_wallet_buttons=true}}
                 {{#if product.out_of_stock}}
                     {{#if product.out_of_stock_message}}
