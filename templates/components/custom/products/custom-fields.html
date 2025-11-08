@@ -71,29 +71,17 @@
 
         // GraphQL query using site.search to find product by SKU
         var query = `
-            query SearchProductBySku($searchTerm: String!) {
-                site {
-                    search {
-                        searchProducts(filters: {searchTerm: $searchTerm}) {
-                            products(first: 1) {
-                                edges {
-                                    node {
-                                        entityId
-                                        sku
-                                        name
-                                        path
-                                        addToCartUrl
-                                        description
-                                    }
-                                }
-                            }
-                        }
-                    }
+            query {
+            site {
+                product (sku: "${sku}" ) {
+                entityId
+                    path
                 }
+            }
             }
         `;
 
-        var payload = { query: query, variables: { searchTerm: sku } };
+        var payload = { query: query};
         console.log('GraphQL request payload:', payload);
 
         fetch('/graphql', {
@@ -111,39 +99,23 @@
                 return json;
             });
         })
-        .then(function(json) {
-            try {
-                // Results are under site.search.searchProducts.products.edges
-                var edges = json && json.data && json.data.site && json.data.site.search 
-                    && json.data.site.search.searchProducts && json.data.site.search.searchProducts.products 
-                    && json.data.site.search.searchProducts.products.edges;
-                
-                console.log('Parsed edges from GraphQL response:', edges);
 
-                if (edges && edges.length) {
-                    var node = edges[0].node;
-                    console.log('Found product node for SKU', sku + ':', node);
-                    
-                    // Redirect to the product page
-                    if (node.path) {
-                        console.log('Redirecting to:', node.path);
-                        window.location.href = node.path;
-                    } else {
-                        console.warn('Product found but no path available');
-                    }
-                    
-                    return node;
-                } else {
-                    console.warn('Product not found via GraphQL; no edges returned for SKU:', sku);
-                    alert('Product with SKU ' + sku + ' not found.');
-                    return null;
-                }
-            } catch (e) {
-                console.error('GraphQL response parsing error', e);
-                alert('Error finding product. Please try again.');
-                return null;
-            }
-        })
+        .then(function(json) {
+        console.log('GraphQL response JSON:', json);
+
+        // Safely check for the path in the response
+        var productPath = json?.data?.site?.product?.path;
+
+        if (productPath) {
+            console.log('Redirecting to:', productPath);
+            // Redirect to the product page
+            window.location.href = productPath;
+        } else {
+            console.error('Product path not found in response:', json);
+            alert('Product not found. Please try again.');
+        }
+    })
+
         .catch(function(err) {
             console.error('GraphQL product lookup failed', err);
             alert('Error connecting to store. Please try again.');
