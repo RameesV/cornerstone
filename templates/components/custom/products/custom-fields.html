@@ -1,29 +1,153 @@
 {{inject "myProductName" product}}
-{{#each product.custom_fields}}
-<!-- <dt class="productView-info-name">{{name}}:</dt> -->
-<!-- <dd class="productView-info-value">{{{value}}}</dd> -->
-<div id="product_swatch_options"></div>
 
-{{/each}}
+<div id="product_swatch_options" class="product-swatch-options" aria-label="Product color options"></div>
 
 <script>
-// Note the lack of quotes around the jsContext handlebars helper, it becomes a string automatically.
-var jsContext = JSON.parse({{jsContext}}); //jsContext would output "{\"myProductName\": \"Sample Product\"}" which can feed directly into your JavaScript
+    // Note the lack of quotes around the jsContext handlebars helper, it becomes a string automatically.
+    // jsContext will be a JSON string representing injected product data.
+    var jsContext = JSON.parse({{jsContext}});
 
-customFieldValue = JSON.parse(jsContext.myProductName.custom_fields[0].value); // Access the injected product data
-console.log("Custom field:", customFieldValue); // Will output: Sample Product
+    console.log("Step 1");
+    
+    // Parse the custom field value which contains an array of { sku, swatch }
+    var customFieldValue = [];
+    try {
+        customFieldValue = JSON.parse(jsContext.myProductName.custom_fields[0].value || '[]');
+    } catch (e) {
+        console.error('Failed to parse custom field JSON', e);
+        customFieldValue = [];
+    }
 
-customFieldValue.forEach(element => {
-    console.log("Element:", element.swatch);   
-    elementDiv = document.getElementById('product_swatch_options');
-    var span = document.createElement('span');
-    span.style.backgroundColor = element.swatch;
-    span.style.display = 'inline-block';
-    span.style.width = '20px';
-    span.style.height = '20px';
-    span.style.borderRadius = '50%';
-    span.style.marginRight = '5px';
-    elementDiv.appendChild(span);
-});
+    var container = document.getElementById('product_swatch_options');
+
+    // Build swatch radio controls
+    customFieldValue.forEach(function(item) {
+        console.log("Item is ", item);
+
+        var label = document.createElement('label');
+        label.className = 'product-swatch-label';
+        label.style.display = 'inline-flex';
+        label.style.alignItems = 'center';
+        label.style.cursor = 'pointer';
+        label.style.marginRight = '8px';
+
+        var input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'product-swatch';
+        input.value = item.sku;
+        input.className = 'product-swatch-input';
+        input.style.display = 'none'; // hide native radio
+
+        var swatch = document.createElement('span');
+        swatch.className = 'product-swatch';
+        swatch.style.width = '24px';
+        swatch.style.height = '24px';
+        swatch.style.borderRadius = '50%';
+        swatch.style.display = 'inline-block';
+        swatch.style.backgroundColor = item.swatch || '#ffffff';
+        swatch.style.border = '1px solid #ddd';
+        swatch.style.boxSizing = 'border-box';
+        swatch.title = item.sku;
+
+        var text = document.createElement('span');
+        text.style.marginLeft = '6px';
+        text.textContent = item.sku;
+
+        label.appendChild(input);
+        label.appendChild(swatch);
+        label.appendChild(text);
+        container.appendChild(label);
+
+        // clicking on swatch selects the input and triggers the handler
+        swatch.addEventListener('click', function() {
+            input.checked = true;
+            onSwatchSelected(item.sku);
+        });
+    });
+
+    // Handler: lookup product by SKU using GraphQL and redirect to product page
+    function onSwatchSelected(sku) {
+        console.log('Selected SKU:', sku);
+
+        // GraphQL query using site.search to find product by SKU
+        var query = `
+            query SearchProductBySku($searchTerm: String!) {
+                site {
+                    search {
+                        searchProducts(filters: {searchTerm: $searchTerm}) {
+                            products(first: 1) {
+                                edges {
+                                    node {
+                                        entityId
+                                        sku
+                                        name
+                                        path
+                                        addToCartUrl
+                                        description
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        `;
+
+        var payload = { query: query, variables: { searchTerm: sku } };
+        console.log('GraphQL request payload:', payload);
+
+        fetch('/graphql', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer {{ settings.storefront_api.token }}'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function(res) {
+            console.log('GraphQL HTTP response status:', res.status, res.statusText);
+            return res.json().then(function(json) {
+                console.log('GraphQL response JSON:', json);
+                return json;
+            });
+        })
+        .then(function(json) {
+            try {
+                // Results are under site.search.searchProducts.products.edges
+                var edges = json && json.data && json.data.site && json.data.site.search 
+                    && json.data.site.search.searchProducts && json.data.site.search.searchProducts.products 
+                    && json.data.site.search.searchProducts.products.edges;
+                
+                console.log('Parsed edges from GraphQL response:', edges);
+
+                if (edges && edges.length) {
+                    var node = edges[0].node;
+                    console.log('Found product node for SKU', sku + ':', node);
+                    
+                    // Redirect to the product page
+                    if (node.path) {
+                        console.log('Redirecting to:', node.path);
+                        window.location.href = node.path;
+                    } else {
+                        console.warn('Product found but no path available');
+                    }
+                    
+                    return node;
+                } else {
+                    console.warn('Product not found via GraphQL; no edges returned for SKU:', sku);
+                    alert('Product with SKU ' + sku + ' not found.');
+                    return null;
+                }
+            } catch (e) {
+                console.error('GraphQL response parsing error', e);
+                alert('Error finding product. Please try again.');
+                return null;
+            }
+        })
+        .catch(function(err) {
+            console.error('GraphQL product lookup failed', err);
+            alert('Error connecting to store. Please try again.');
+            return null;
+        });
+    }
 </script>
-
