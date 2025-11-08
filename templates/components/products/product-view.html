@@ -95,7 +95,7 @@
 
     <section class="productView-details product-data">
         <div class="productView-product">
-            <h1 class="productView-title">{{product.title}}</h1>
+            <h1 class="productView-title">{{product.title}}</h1> 
             {{#if product.brand}}
                 <h2 class="productView-brand">
                     <a href="{{product.brand.url}}"><span>{{product.brand.name}}</span></a>
@@ -249,6 +249,12 @@
                         <span data-product-stock>{{product.stock_level}}</span>
                     </label>
                 </div>
+                                            
+            {{!-- LOW STOCK BADGE --}}
+            <div id="low_stock_badge" class="low-stock-badge" style="display: none; background-color: #ff6b6b; color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; margin-bottom: 16px; text-align: center;">
+                ⚠️ Low Stock - Only <span id="stock_count"></span> left!
+            </div>
+
                 {{> components/products/add-to-cart with_wallet_buttons=true}}
                 {{#if product.out_of_stock}}
                     {{#if product.out_of_stock_message}}
@@ -279,3 +285,153 @@
     <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-header-title"></div>
     <div class="loadingOverlay"></div>
 </div>
+
+<script>
+    (function() {
+        // Get product ID from the page data attribute
+        var productElement = document.querySelector('[data-entity-id]');
+        var productId = productElement ? productElement.getAttribute('data-entity-id') : null;
+
+        if (!productId) {
+            console.error('Product ID not found');
+            return;
+        }
+
+        console.log('Checking stock for product ID:', productId);
+
+        // GraphQL query to get product inventory
+        var query = `
+            query GetProductStock($productId: Int!) {
+                site {
+                    product(entityId: $productId) {
+                        entityId
+                        name
+                        sku
+                        inventory {
+                            isInStock
+                            hasVariantInventory
+                            aggregated {
+                                availableToSell
+                                warningLevel
+                            }
+                        }
+                        variants(first: 50) {
+                            edges {
+                                node {
+                                    entityId
+                                    sku
+                                    inventory {
+                                        isInStock
+                                        aggregated {
+                                            availableToSell
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        `;
+
+        var payload = { 
+            query: query, 
+            variables: { productId: parseInt(productId) } 
+        };
+
+        console.log('GraphQL request payload:', JSON.stringify(payload, null, 2));
+
+        fetch('/graphql', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer {{ settings.storefront_api.token }}'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function(res) {
+            console.log('GraphQL HTTP response status:', res.status, res.statusText);
+            if (!res.ok) {
+                throw new Error('GraphQL request failed with status ' + res.status);
+            }
+            return res.json();
+        })
+        .then(function(json) {
+            console.log('GraphQL response JSON:', json);
+
+            // Check if we have valid product data
+            if (json && json.data && json.data.site && json.data.site.product) {
+                var product = json.data.site.product;
+                var inventory = product.inventory;
+
+                console.log('Product inventory:', inventory);
+
+                var availableStock = null;
+
+                // Try to get stock from product-level aggregated inventory
+                if (inventory && inventory.aggregated && inventory.aggregated.availableToSell !== null) {
+                    availableStock = inventory.aggregated.availableToSell;
+                    console.log('Stock from product aggregated:', availableStock);
+                }
+                // If product-level is null, try to get from variants
+                else if (product.variants && product.variants.edges && product.variants.edges.length > 0) {
+                    console.log('Product-level inventory is null, checking variants...');
+                    
+                    // Calculate total stock from all variants
+                    var totalStock = 0;
+                    var hasValidInventory = false;
+                    
+                    product.variants.edges.forEach(function(edge) {
+                        var variant = edge.node;
+                        if (variant.inventory && variant.inventory.aggregated && 
+                            variant.inventory.aggregated.availableToSell !== null) {
+                            totalStock += variant.inventory.aggregated.availableToSell;
+                            hasValidInventory = true;
+                            console.log('Variant', variant.sku, 'stock:', variant.inventory.aggregated.availableToSell);
+                        }
+                    });
+                    
+                    if (hasValidInventory) {
+                        availableStock = totalStock;
+                        console.log('Total stock from variants:', availableStock);
+                    }
+                }
+                // Last resort: check the data-product-stock element on the page
+                else {
+                    console.log('No GraphQL inventory data, checking page element...');
+                    var stockElement = document.querySelector('[data-product-stock]');
+                    if (stockElement && stockElement.textContent.trim()) {
+                        availableStock = parseInt(stockElement.textContent.trim());
+                        console.log('Stock from page element:', availableStock);
+                    }
+                }
+
+                // Display low stock badge if we have valid stock data
+                if (availableStock !== null && !isNaN(availableStock)) {
+                    console.log('Final available stock:', availableStock);
+
+                    // Show badge if stock is less than 10 and greater than 0
+                    if (availableStock > 0 && availableStock < 10) {
+                        var badge = document.getElementById('low_stock_badge');
+                        var stockCountSpan = document.getElementById('stock_count');
+
+                        if (badge && stockCountSpan) {
+                            stockCountSpan.textContent = availableStock;
+                            badge.style.display = 'block';
+                            console.log('Low stock badge displayed with count:', availableStock);
+                        }
+                    } else {
+                        console.log('Stock level is OK (', availableStock, '), no badge needed');
+                    }
+                } else {
+                    console.log('No valid inventory data available from any source');
+                }
+            } else {
+                console.error('Invalid GraphQL response structure:', json);
+            }
+        })
+        .catch(function(err) {
+            console.error('Failed to fetch product stock:', err);
+        });
+    })();
+</script>
