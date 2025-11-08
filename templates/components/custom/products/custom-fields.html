@@ -1,0 +1,29 @@
+{{inject "myProductName" product}}
+{{#each product.custom_fields}}
+<!-- <dt class="productView-info-name">{{name}}:</dt> -->
+<!-- <dd class="productView-info-value">{{{value}}}</dd> -->
+<div id="product_swatch_options"></div>
+
+{{/each}}
+
+<script>
+// Note the lack of quotes around the jsContext handlebars helper, it becomes a string automatically.
+var jsContext = JSON.parse({{jsContext}}); //jsContext would output "{\"myProductName\": \"Sample Product\"}" which can feed directly into your JavaScript
+
+customFieldValue = JSON.parse(jsContext.myProductName.custom_fields[0].value); // Access the injected product data
+console.log("Custom field:", customFieldValue); // Will output: Sample Product
+
+customFieldValue.forEach(element => {
+    console.log("Element:", element.swatch);   
+    elementDiv = document.getElementById('product_swatch_options');
+    var span = document.createElement('span');
+    span.style.backgroundColor = element.swatch;
+    span.style.display = 'inline-block';
+    span.style.width = '20px';
+    span.style.height = '20px';
+    span.style.borderRadius = '50%';
+    span.style.marginRight = '5px';
+    elementDiv.appendChild(span);
+});
+</script>
+
