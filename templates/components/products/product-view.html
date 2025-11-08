@@ -293,11 +293,11 @@
         var productId = productElement ? productElement.getAttribute('data-entity-id') : null;
 
         if (!productId) {
-            console.error('Product ID not found');
+            // console.error('Product ID not found');
             return;
         }
 
-        console.log('Checking stock for product ID:', productId);
+        // console.log('Checking stock for product ID:', productId);
 
         // GraphQL query to get product inventory
         var query = `
@@ -339,7 +339,7 @@
             variables: { productId: parseInt(productId) } 
         };
 
-        console.log('GraphQL request payload:', JSON.stringify(payload, null, 2));
+        // console.log('GraphQL request payload:', JSON.stringify(payload, null, 2));
 
         fetch('/graphql', {
             method: 'POST',
@@ -350,32 +350,32 @@
             body: JSON.stringify(payload)
         })
         .then(function(res) {
-            console.log('GraphQL HTTP response status:', res.status, res.statusText);
+            // console.log('GraphQL HTTP response status:', res.status, res.statusText);
             if (!res.ok) {
                 throw new Error('GraphQL request failed with status ' + res.status);
             }
             return res.json();
         })
         .then(function(json) {
-            console.log('GraphQL response JSON:', json);
+            // console.log('GraphQL response JSON:', json);
 
             // Check if we have valid product data
             if (json && json.data && json.data.site && json.data.site.product) {
                 var product = json.data.site.product;
                 var inventory = product.inventory;
 
-                console.log('Product inventory:', inventory);
+                // console.log('Product inventory:', inventory);
 
                 var availableStock = null;
 
                 // Try to get stock from product-level aggregated inventory
                 if (inventory && inventory.aggregated && inventory.aggregated.availableToSell !== null) {
                     availableStock = inventory.aggregated.availableToSell;
-                    console.log('Stock from product aggregated:', availableStock);
+                    // console.log('Stock from product aggregated:', availableStock);
                 }
                 // If product-level is null, try to get from variants
                 else if (product.variants && product.variants.edges && product.variants.edges.length > 0) {
-                    console.log('Product-level inventory is null, checking variants...');
+                    // console.log('Product-level inventory is null, checking variants...');
                     
                     // Calculate total stock from all variants
                     var totalStock = 0;
@@ -387,28 +387,28 @@
                             variant.inventory.aggregated.availableToSell !== null) {
                             totalStock += variant.inventory.aggregated.availableToSell;
                             hasValidInventory = true;
-                            console.log('Variant', variant.sku, 'stock:', variant.inventory.aggregated.availableToSell);
+                            // console.log('Variant', variant.sku, 'stock:', variant.inventory.aggregated.availableToSell);
                         }
                     });
                     
                     if (hasValidInventory) {
                         availableStock = totalStock;
-                        console.log('Total stock from variants:', availableStock);
+                        // console.log('Total stock from variants:', availableStock);
                     }
                 }
                 // Last resort: check the data-product-stock element on the page
                 else {
-                    console.log('No GraphQL inventory data, checking page element...');
+                    // console.log('No GraphQL inventory data, checking page element...');
                     var stockElement = document.querySelector('[data-product-stock]');
                     if (stockElement && stockElement.textContent.trim()) {
                         availableStock = parseInt(stockElement.textContent.trim());
-                        console.log('Stock from page element:', availableStock);
+                        // console.log('Stock from page element:', availableStock);
                     }
                 }
 
                 // Display low stock badge if we have valid stock data
                 if (availableStock !== null && !isNaN(availableStock)) {
-                    console.log('Final available stock:', availableStock);
+                    // console.log('Final available stock:', availableStock);
 
                     // Show badge if stock is less than 10 and greater than 0
                     if (availableStock > 0 && availableStock < 10) {
@@ -418,20 +418,20 @@
                         if (badge && stockCountSpan) {
                             stockCountSpan.textContent = availableStock;
                             badge.style.display = 'block';
-                            console.log('Low stock badge displayed with count:', availableStock);
+                            // console.log('Low stock badge displayed with count:', availableStock);
                         }
                     } else {
-                        console.log('Stock level is OK (', availableStock, '), no badge needed');
+                        // console.log('Stock level is OK (', availableStock, '), no badge needed');
                     }
                 } else {
-                    console.log('No valid inventory data available from any source');
+                    // console.log('No valid inventory data available from any source');
                 }
             } else {
-                console.error('Invalid GraphQL response structure:', json);
+                // console.error('Invalid GraphQL response structure:', json);
             }
         })
         .catch(function(err) {
-            console.error('Failed to fetch product stock:', err);
+            // console.error('Failed to fetch product stock:', err);
         });
     })();
 </script>

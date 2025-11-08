@@ -7,14 +7,14 @@
     // jsContext will be a JSON string representing injected product data.
     var jsContext = JSON.parse({{jsContext}});
 
-    console.log("Step 1");
+    // console.log("Step 1");
     
     // Parse the custom field value which contains an array of { sku, swatch }
     var customFieldValue = [];
     try {
         customFieldValue = JSON.parse(jsContext.myProductName.custom_fields[0].value || '[]');
     } catch (e) {
-        console.error('Failed to parse custom field JSON', e);
+        // console.error('Failed to parse custom field JSON', e);
         customFieldValue = [];
     }
 
@@ -22,7 +22,7 @@
 
     // Build swatch radio controls
     customFieldValue.forEach(function(item) {
-        console.log("Item is ", item);
+        // console.log("Item is ", item);
 
         var label = document.createElement('label');
         label.className = 'product-swatch-label';
@@ -67,7 +67,7 @@
 
     // Handler: lookup product by SKU using GraphQL and redirect to product page
     function onSwatchSelected(sku) {
-        console.log('Selected SKU:', sku);
+        // console.log('Selected SKU:', sku);
 
         // GraphQL query using site.search to find product by SKU
         var query = `
@@ -82,7 +82,7 @@
         `;
 
         var payload = { query: query};
-        console.log('GraphQL request payload:', payload);
+        // console.log('GraphQL request payload:', payload);
 
         fetch('/graphql', {
             method: 'POST',
@@ -93,31 +93,31 @@
             body: JSON.stringify(payload)
         })
         .then(function(res) {
-            console.log('GraphQL HTTP response status:', res.status, res.statusText);
+            // console.log('GraphQL HTTP response status:', res.status, res.statusText);
             return res.json().then(function(json) {
-                console.log('GraphQL response JSON:', json);
+                // console.log('GraphQL response JSON:', json);
                 return json;
             });
         })
 
         .then(function(json) {
-        console.log('GraphQL response JSON:', json);
+        // console.log('GraphQL response JSON:', json);
 
         // Safely check for the path in the response
         var productPath = json?.data?.site?.product?.path;
 
         if (productPath) {
-            console.log('Redirecting to:', productPath);
+            // console.log('Redirecting to:', productPath);
             // Redirect to the product page
             window.location.href = productPath;
         } else {
-            console.error('Product path not found in response:', json);
+            // console.error('Product path not found in response:', json);
             alert('Product not found. Please try again.');
         }
     })
 
         .catch(function(err) {
-            console.error('GraphQL product lookup failed', err);
+            // console.error('GraphQL product lookup failed', err);
             alert('Error connecting to store. Please try again.');
             return null;
         });
