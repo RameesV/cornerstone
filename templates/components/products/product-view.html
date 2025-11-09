@@ -524,11 +524,13 @@
                             
                             // console.log('Adding main product and', selectedAddons.length, 'addon(s) to cart');
                             
-                            // Get main product ID from the form
+                            // Get main product ID and selected quantity from the form
                             var mainProductId = addToCartForm.querySelector('[name="product_id"]').value;
-                            
-                            // Start the chain by adding the main product
-                            var promise = fetch('/cart.php?action=add&product_id=' + mainProductId, {
+                            var qtyInput = addToCartForm.querySelector('[name="qty[]"]');
+                            var mainQty = (qtyInput && qtyInput.value) ? qtyInput.value : '1';
+
+                            // Start the chain by adding the main product including selected quantity
+                            var promise = fetch('/cart.php?action=add&product_id=' + encodeURIComponent(mainProductId) + '&qty[]=' + encodeURIComponent(mainQty), {
                                 method: 'GET'
                             })
                             .then(function(response) {
