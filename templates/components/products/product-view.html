@@ -322,7 +322,7 @@
                     return res.json();
                 })
                 .then(function(json) {
-                    console.log('Product data response:', json);
+                    // console.log('Product data response:', json);
                     
                     if (json && json.data && json.data.site && json.data.site.product) {
                         var product = json.data.site.product;
@@ -341,7 +341,7 @@
                                 return !isNaN(id);
                             });
                             
-                            console.log('Addon product IDs:', addonProductIds);
+                            // console.log('Addon product IDs:', addonProductIds);
                             
                             if (addonProductIds.length > 0) {
                                 // Fetch details for addon products
@@ -350,7 +350,7 @@
                                 hideAddonSection();
                             }
                         } else {
-                            console.log('No addon products configured for this product');
+                            // console.log('No addon products configured for this product');
                             hideAddonSection();
                         }
                     } else {
@@ -358,7 +358,7 @@
                     }
                 })
                 .catch(function(err) {
-                    console.error('Failed to fetch product data:', err);
+                    // console.error('Failed to fetch product data:', err);
                     hideAddonSection();
                 });
 
@@ -409,7 +409,7 @@
                         return res.json();
                     })
                     .then(function(json) {
-                        console.log('Addon products response:', json);
+                        // console.log('Addon products response:', json);
                         
                         if (json && json.data && json.data.site && json.data.site.products) {
                             var products = json.data.site.products.edges;
@@ -424,7 +424,7 @@
                         }
                     })
                     .catch(function(err) {
-                        console.error('Failed to fetch addon products:', err);
+                        // console.error('Failed to fetch addon products:', err);
                         hideAddonSection();
                     });
                 }
@@ -502,69 +502,64 @@
                     document.getElementById('addon-products-loading').style.display = 'none';
                 }
 
-                // Intercept add to cart form submission
+                // Intercept add to cart form submission with SEQUENTIAL chain method
                 var addToCartForm = document.querySelector('form[data-cart-item-add]');
                 
                 if (addToCartForm) {
                     addToCartForm.addEventListener('submit', function(e) {
+                        // console.log('Add to cart button clicked!');
+                        
                         // Check if any addons are selected
                         var selectedAddons = document.querySelectorAll('.addon-product-checkbox:checked');
+                        // console.log('Selected addons:', selectedAddons);
+                        
+                        // Get the product ids from the selected addons
+                        var productIds = Array.from(selectedAddons).map(function(checkbox) {
+                            return checkbox.getAttribute('data-product-id');
+                        });
+                        // console.log("Product IDs", productIds);
                         
                         if (selectedAddons.length > 0) {
                             e.preventDefault(); // Prevent default form submission
                             
-                            console.log('Adding main product and', selectedAddons.length, 'addon(s) to cart');
+                            // console.log('Adding main product and', selectedAddons.length, 'addon(s) to cart');
                             
-                            // First, add the main product
-                            var formData = new FormData(addToCartForm);
+                            // Get main product ID from the form
+                            var mainProductId = addToCartForm.querySelector('[name="product_id"]').value;
                             
-                            fetch(addToCartForm.action, {
-                                method: 'POST',
-                                body: formData
+                            // Start the chain by adding the main product
+                            var promise = fetch('/cart.php?action=add&product_id=' + mainProductId, {
+                                method: 'GET'
                             })
-                            .then(function(res) {
-                                return res.text();
-                            })
-                            .then(function(data) {
-                                console.log('Main product added to cart');
-                                
-                                // Now add each selected addon
-                                var addonPromises = [];
-                                
-                                selectedAddons.forEach(function(checkbox) {
-                                    var productId = checkbox.getAttribute('data-product-id');
-                                    var addToCartUrl = checkbox.getAttribute('data-product-url');
-                                    
-                                    // Create form data for addon product
-                                    var addonFormData = new FormData();
-                                    addonFormData.append('action', 'add');
-                                    addonFormData.append('product_id', productId);
-                                    addonFormData.append('qty[]', '1');
-                                    
-                                    var addonPromise = fetch('/cart.php', {
-                                        method: 'POST',
-                                        body: addonFormData
-                                    })
-                                    .then(function(res) {
-                                        console.log('Addon product', productId, 'added to cart');
-                                        return res;
-                                    });
-                                    
-                                    addonPromises.push(addonPromise);
-                                });
-                                
-                                // Wait for all addons to be added
-                                return Promise.all(addonPromises);
-                            })
-                            .then(function() {
-                                console.log('All products added to cart successfully');
-                                // Redirect to cart or reload page
-                                window.location.href = '/cart.php';
-                            })
-                            .catch(function(err) {
-                                console.error('Error adding products to cart:', err);
-                                alert('There was an error adding products to cart. Please try again.');
+                            .then(function(response) {
+                                // console.log('Main product ' + mainProductId + ' added to cart');
+                                return response;
                             });
+                            
+                            // Chain each addon product sequentially
+                            productIds.forEach(function(productId) {
+                                promise = promise.then(function() {
+                                    // console.log('Adding addon product ' + productId);
+                                    return fetch('/cart.php?action=add&product_id=' + productId, {
+                                        method: 'GET'
+                                    });
+                                })
+                                .then(function(response) {
+                                    // console.log('Addon product ' + productId + ' complete');
+                                    return response;
+                                });
+                            });
+                            
+                            // After all products are added, redirect to cart
+                            promise
+                                .then(function() {
+                                    // console.log('All products added to cart successfully');
+                                    window.location.href = '/cart.php';
+                                })
+                                .catch(function(error) {
+                                    // console.error('Error adding products to cart:', error);
+                                    alert('There was an error adding products to cart. Please try again.');
+                                });
                         }
                         // If no addons selected, allow normal form submission
                     });
