@@ -7,6 +7,15 @@
     // jsContext will be a JSON string representing injected product data.
     var jsContext = JSON.parse({{jsContext}});
 
+    // Add minimal styles for selected swatch state
+    (function(){
+        var css = '\n            .product-swatch-label { display: inline-flex; align-items: center; margin-right: 8px; cursor: pointer; }\n            .product-swatch { width: 24px; height: 24px; border-radius: 50%; display: inline-block; box-sizing: border-box; border: 1px solid #ddd; transition: box-shadow 0.12s ease, transform 0.08s ease; }\n            .product-swatch-label.selected .product-swatch { box-shadow: 0 0 0 3px rgba(0,0,0,0.12); transform: scale(1.05); border-color: #333; }\n        ';
+        var style = document.createElement('style');
+        style.type = 'text/css';
+        style.appendChild(document.createTextNode(css));
+        document.head.appendChild(style);
+    })();
+
     // console.log("Step 1");
     
     // Parse the custom field value which contains an array of { sku, swatch }
@@ -61,9 +70,49 @@
         // clicking on swatch selects the input and triggers the handler
         swatch.addEventListener('click', function() {
             input.checked = true;
+            // remove selected class from any previously selected labels
+            var prev = container.querySelectorAll('.product-swatch-label.selected');
+            prev.forEach(function(p) { p.classList.remove('selected'); });
+            // add selected class to this label
+            label.classList.add('selected');
             onSwatchSelected(item.sku);
         });
+
+        // support keyboard selection
+        input.addEventListener('change', function() {
+            if (input.checked) {
+                var prev = container.querySelectorAll('.product-swatch-label.selected');
+                prev.forEach(function(p) { p.classList.remove('selected'); });
+                label.classList.add('selected');
+            }
+        });
     });
+
+    // After building swatches, highlight the swatch that matches the current product SKU
+    (function highlightCurrentSku() {
+        try {
+            var currentSku = null;
+            if (jsContext && jsContext.myProductName && jsContext.myProductName.sku) {
+                currentSku = jsContext.myProductName.sku;
+            } else {
+                var skuEl = document.querySelector('[data-product-sku]');
+                if (skuEl) currentSku = skuEl.textContent.trim();
+            }
+
+            if (!currentSku) return;
+
+            var labels = container.querySelectorAll('.product-swatch-label');
+            labels.forEach(function(label) {
+                var input = label.querySelector('input[name="product-swatch"]');
+                if (input && input.value === currentSku) {
+                    input.checked = true;
+                    label.classList.add('selected');
+                }
+            });
+        } catch (e) {
+            console.warn('Could not auto-select swatch for current SKU', e);
+        }
+    })();
 
     // Handler: lookup product by SKU using GraphQL and redirect to product page
     function onSwatchSelected(sku) {
